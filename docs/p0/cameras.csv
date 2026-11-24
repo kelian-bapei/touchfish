@@ -1,0 +1,8 @@
+Id,Name,Type,X,Y,Z,Pitch,Yaw,FOV,OrthoWidth,Duration,Notes
+CAM-02a,全城鸟瞰,BoardOrtho,-100,-520,600,-90,0,0,4600,2.5,正交覆盖 4.2×3.0 km
+CAM-02b,河谷轴测,BoardPersp,-1900,-110,240,-30,0,55,0,2.5,沿河向东，透视
+CAM-02c,园区局部,BoardPersp,-1500,300,260,-50,90,50,0,2.5,俯瞰 A 区
+CAM-03a,科创大楼,JumpPersp,-1500,440,90,-5,90,50,0,1.8,正立面 120 m 外，EL +90
+CAM-03b,滨河步道,JumpPersp,-400,-60,12,-2,5,55,0,1.8,北岸步道向东，EL +2
+CAM-03c,山顶观景台,JumpPersp,0,-1250,145,-10,90,55,0,1.8,南山 EL +145 俯瞰河谷
+PLAYER,漫游起点,PlayerStart,-1200,-10,4.9,0,0,60,0,0,北岸滨河大道
