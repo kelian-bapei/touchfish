@@ -1,0 +1,20 @@
+NodeId,Category,ActorTag,DisplayName,Trigger,Feedback,ParamJson,Dependencies,Enabled
+CAM-01,Camera,BP_CameraDirector,自由漫游,"点击""进入漫游""；WASD/QE/右键/Shift",步行与飞行切换，三档速度，碰撞滑动,"{""mode"":""walk|fly"",""speeds"":[3,10,30]}",,true
+CAM-02,Camera,BP_CameraDirector,定点鸟瞰,"进入场景默认；UI 重呼",2.5 s 插值到预设，可轨道旋转、滚轮缩放,"{""presets"":[""city"",""river"",""park""]}",,true
+CAM-03,Camera,BP_CameraDirector,快速跳转,"点位列表 / 快捷键 1-3",1.8 s 样条飞行，落位后 Toast,"{""duration"":1.8}",,true
+CAM-04,Camera,BP_CameraDirector,云层穿越,关闭,—,—,,false
+CAM-05,Camera,BP_CameraDirector,日出延时,关闭,—,—,,false
+OBJ-01,Object,BP_Interactable_Tower,科创大楼简介,"点击楼体任意位置",三页签弹窗：简介 / 楼层 / 能耗；可固定，切换不同楼,"{""tabs"":[""intro"",""floors"",""energy""]}",,true
+OBJ-02,Object,BP_StreetLamp,路灯开关,"点击灯柱",面板：开关 + 亮度滑条 0-100% + 色温；全局照明联动,"{""brightness"":80,""kelvin"":4000}",,true
+OBJ-03,Object,BP_RailControlPoint,水位控制,"点击栏杆控制牌",切 常态 / 汛期；水位 2.5 s 过渡；联动预警灯与封路,"{""levels"":[""normal"",""flood""]}",EVT-01,true
+OBJ-04,Object,BP_InfoBoard,公园信息牌,"点击牌面",图文弹窗 + 地图定位 + 关闭回写,"{""boardId"":""park-north""}",,true
+ENV-01,Env,BP_EnvironmentDirector,时间切换,顶栏按钮 / 快捷键 Q-E,2.5 s 插值：光照 / 阴影 / 雾 / 路灯 / 内透 / 天空,"{""presets"":[""dawn"",""noon"",""dusk"",""rainy_night"",""night""]}",,true
+ENV-02,Env,BP_EnvironmentDirector,天气切换,顶栏下拉,3 s 插值：云量 / 降雨 / 雾 / 湿度 / 反照；切换时清空临时状态,"{""presets"":[""clear"",""cloudy"",""drizzle"",""mist""]}",ENV-01,true
+ENV-03,Env,BP_TrafficSystem,车流开关,顶栏开关 + 档位,车辆行人启停；密度 40 / 120 / 200；关时 3 s 淡出,"{""density"":[40,120,200]}",,true
+EVT-01,Event,BP_EventDirector,汛期模拟,顶栏红色按钮,20 s 时序：预警横幅→水位 +2.4 m→漫滩→封路→恢复；事件中冲突交互降级,"{""rise"":2.4,""duration"":20}",OBJ-03;ENV-02,true
+EVT-02,Event,BP_EventDirector,夜景模式,顶栏按钮,顺序点亮：路灯 0.08 s 错峰→内透→玻璃幕墙→桥→霓虹；再点反向,"{""stagger"":0.08}",ENV-01,true
+EXT-01,Ext,BP_Interactable_Bridge,桥梁结构面板,关闭,—,—,,false
+EXT-02,Ext,BP_Interactable_Park,绿心生态面板,关闭,—,—,,false
+EXT-03,Ext,BP_Interactable_Station,公交站台,关闭,—,—,,false
+EXT-04,Ext,BP_Interactable_Parking,地下车库入口,关闭,—,—,,false
+EXT-05,Ext,BP_Interactable_Gateway,高速入口闸机,关闭,—,—,,false
