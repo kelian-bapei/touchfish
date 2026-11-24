@@ -3,6 +3,14 @@
 - 离线单页：**直接双击 `index.html`** 即可运行（经典脚本，`file://` 可用，无需构建、无需联网、无需服务器）；也可以用 `python3 -m http.server 8781` 后访问 `http://127.0.0.1:8781/`。
 - 依赖：`vendor/three.min.js`（r0.160.0 UMD，本地内置）。控制台会打印 UMD 构建的弃用提示，不影响运行。
 
+## 预览
+
+![默认鸟瞰](screenshots/day.png)
+
+| 白天（默认视角） | 夜晚 | 汛期 + 夜晚 |
+|---|---|---|
+| ![](screenshots/day.png) | ![](screenshots/night.png) | ![](screenshots/flood-night.png) |
+
 ## 操作
 
 - 左键拖动旋转，滚轮缩放，右键拖动平移，双击复位。
