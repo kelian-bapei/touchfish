@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>山地河谷科创城市 · P0 交互灰盒</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<canvas id="scene"></canvas>
+
+<header id="topbar">
+  <div class="brand"><b>山地河谷科创城市</b><span>P0 交互灰盒 · Three.js</span></div>
+  <div class="group" id="time-group">
+    <span class="label">时间</span>
+    <button data-time="dawn">清晨</button>
+    <button data-time="noon" class="active">正午</button>
+    <button data-time="dusk">黄昏</button>
+    <button data-time="rainy_night">雨夜</button>
+    <button data-time="night">夜晚</button>
+  </div>
+  <div class="group" id="weather-group">
+    <span class="label">天气</span>
+    <button data-weather="clear" class="active">晴</button>
+    <button data-weather="cloudy">多云</button>
+    <button data-weather="drizzle">小雨</button>
+    <button data-weather="mist">薄雾</button>
+  </div>
+  <div class="group">
+    <button id="traffic-btn" class="toggle active">车流</button>
+    <button id="flood-btn" class="toggle">汛期</button>
+    <button id="nightshow-btn" class="toggle">夜景模式</button>
+  </div>
+  <button id="reset-btn" class="ghost">复位视角</button>
+</header>
+
+<nav id="cams">
+  <button data-cam="ortho" class="active">全城鸟瞰</button>
+  <button data-cam="CAM-02b">河谷</button>
+  <button data-cam="CAM-02c">园区</button>
+  <button data-cam="CAM-03a">科创大楼</button>
+  <button data-cam="CAM-03b">滨河步道</button>
+  <button data-cam="CAM-03c">观景台</button>
+</nav>
+
+<aside id="panel" class="hidden">
+  <button id="panel-close" title="关闭">×</button>
+  <div id="panel-body"></div>
+</aside>
+
+<div id="toast" class="hidden"></div>
+<div id="hint">左键拖动旋转 · 滚轮缩放 · 右键拖动平移 · 点击建筑 / 路灯 / ★ 锚点查看交互</div>
+<div id="loading">正在生成城市…</div>
+<div id="error" class="hidden"></div>
+
+<script src="vendor/three.min.js"></script>
+<script src="data.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
