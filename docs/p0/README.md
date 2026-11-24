@@ -31,7 +31,15 @@ P0 的目标是**不依赖任何精模**先把交互骨架和空间关系跑通�
    - 执行 `exec(open(r"D:/City/P0/import_blockout.py").read())`，或设环境变量 `P0_DIR` 后 Execute Python Script。
    - 脚本会生成带标签的 StaticMeshActor，tag 分组：`P0_Zone` / `P0_Building` / `P0_Road` / `P0_Camera` / `P0_Marker`。
    - 脚本在 UE 5.4 的 Python API 下编写，未在本机编辑器验证；若个别 API 报错，按错误行调整（常见差异在 `spawn_actor_from_class` 与 CameraComponent 的正交属性）。
-3. **DataTable**：做交互框架时，把 `buildings.csv` 映射到同名结构体即可直接导入为 `DT_Buildings`。
+ 3. **DataTable**：做交互框架时，把 `buildings.csv` 映射到同名结构体即可直接导入为 `DT_Buildings`。
+
+## 预览（不用装 UE5）
+
+- `preview.html`：单文件矢量预览，双击用浏览器打开即可，离线、无依赖。平面 / 轴测两个视图，滚轮缩放、拖动平移、双击复位；点建筑体块或 ★ 锚点，右侧显示该交互节点的触发方式与反馈。
+  - `preview.html#axo` 直接打开轴测图；`preview.html#node=OBJ-01` 直接选中某个节点。
+- `preview_plan.png`、`preview_iso.png`：同一套数据的静态图，适合贴进汇报或聊天。
+- 重新生成：`python3 build_preview_html.py`（只用 Python 3 标准库）；`python3 render_preview.py`（需要 matplotlib，仅生成 PNG）。配色和几何定义在 `p0_common.py`，两个脚本共用。
+
 
 ## 与设计文档的差异（P0 简化）
 

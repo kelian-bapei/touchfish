@@ -34,6 +34,7 @@
 
 > 每个阶段结束提交一次 git 版本；P0 灰盒即首个可演示基线。
 > P0 灰盒坐标包见 `docs/p0/`（分区、路网、桥位、体块、相机、交互锚点）。
+> 浏览器直接看：`docs/p0/preview.html`（离线单文件，可点节点）；静态图 `docs/p0/preview_plan.png` / `preview_iso.png`。
 
 ---
 
