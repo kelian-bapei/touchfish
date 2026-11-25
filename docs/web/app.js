@@ -37,7 +37,7 @@
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 0.92;
+  renderer.toneMappingExposure = 0.9;
   renderer.outputColorSpace = THREE.SRGBColorSpace;
 
   const scene = new THREE.Scene();
@@ -96,22 +96,51 @@
   sky.renderOrder = -10;
   scene.add(sky);
 
-  const sun = new THREE.DirectionalLight(0xfff6e8, 3.0);
+  const sun = new THREE.DirectionalLight(0xfff6e8, 2.6);
   sun.castShadow = true;
   sun.shadow.mapSize.set(2048, 2048);
-  sun.shadow.camera.left = -2800;
-  sun.shadow.camera.right = 2800;
-  sun.shadow.camera.top = 2800;
-  sun.shadow.camera.bottom = -2800;
-  sun.shadow.camera.near = 100;
-  sun.shadow.camera.far = 12000;
-  sun.shadow.bias = -0.0006;
-  sun.shadow.normalBias = 2.0;
+  sun.shadow.camera.left = -2500;
+  sun.shadow.camera.right = 2500;
+  sun.shadow.camera.top = 2000;
+  sun.shadow.camera.bottom = -2000;
+  sun.shadow.camera.near = 200;
+  sun.shadow.camera.far = 9000;
+  sun.shadow.bias = -0.0004;
+  sun.shadow.normalBias = 1.4;
   scene.add(sun);
   scene.add(sun.target);
 
-  const hemi = new THREE.HemisphereLight(0xcfe4f2, 0x5a5142, 0.85);
+  const hemi = new THREE.HemisphereLight(0xcfe4f2, 0x5a5142, 0.62);
   scene.add(hemi);
+
+  // 环境反射：同一片天空烘成 PMREM，给水面、金属与玻璃提供间接光
+  const pmrem = new THREE.PMREMGenerator(renderer);
+  const envSkyUniforms = {
+    topColor: { value: new THREE.Color() },
+    horizonColor: { value: new THREE.Color() },
+    sunColor: { value: new THREE.Color() },
+    sunDir: { value: new THREE.Vector3(0, 1, 0) },
+  };
+  const envSkyMat = sky.material.clone();
+  envSkyMat.uniforms = envSkyUniforms;
+  let envRT = null;
+  let envDirty = true;
+  function refreshEnvironment() {
+    if (envRT) { envRT.dispose(); envRT = null; }
+    envSkyUniforms.topColor.value.copy(skyUniforms.topColor.value).multiplyScalar(0.42);
+    envSkyUniforms.horizonColor.value.copy(skyUniforms.horizonColor.value).multiplyScalar(0.5);
+    envSkyUniforms.sunColor.value.copy(skyUniforms.sunColor.value).multiplyScalar(0.22);
+    envSkyUniforms.sunDir.value.copy(skyUniforms.sunDir.value);
+    const envScene = new THREE.Scene();
+    const envSky = new THREE.Mesh(new THREE.SphereGeometry(6000, 24, 12), envSkyMat);
+    envScene.add(envSky);
+    envRT = pmrem.fromScene(envScene, 0, 1, 20000);
+    [waterMaterial, railMaterial, poleMaterial, lampHeadMaterialBase].forEach((mat) => {
+      if (mat) { mat.envMap = envRT.texture; mat.needsUpdate = true; }
+    });
+    envSky.geometry.dispose();
+    envDirty = false;
+  }
 
   // 星空
   function makeStars() {
@@ -554,8 +583,9 @@
   waterGeo.rotateX(-Math.PI / 2);
   const waterMaterial = new THREE.MeshStandardMaterial({
     color: 0x24506b,
-    roughness: 0.08,
-    metalness: 0.0,
+    roughness: 0.045,
+    metalness: 0.08,
+    envMapIntensity: 1.6,
     transparent: true,
     opacity: 0.94,
     normalMap: waterNormal,
@@ -956,6 +986,7 @@
     envTgt.fogColor.copy(t.fogColor);
     envTgt.ground.copy(t.ground);
     rain.visible = wRain();
+    envDirty = true;
   }
   function wRain() {
     return state.weather === 'drizzle' || state.time === 'rainy_night';
@@ -1784,6 +1815,9 @@
     }
 
     fillerMaterial.emissiveIntensity = envCur.windows * 1.7;
+    waterMaterial.normalMap.offset.x -= dt * 0.010 * waterState.flow;
+    waterMaterial.normalMap.offset.y += dt * 0.003;
+    if (envDirty) refreshEnvironment();
 
     // 悬停标签随距离缩放，保持屏幕尺寸稳定
     if (hoverLabel.visible) {
