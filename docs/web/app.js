@@ -39,8 +39,107 @@
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 0.9;
   renderer.outputColorSpace = THREE.SRGBColorSpace;
+  renderer.info.autoReset = false;
 
   const scene = new THREE.Scene();
+  // ---- 轻量 Bloom：场景 → 亮部提取 → 两遍高斯模糊 → 合成（无外部依赖） ----
+  const fsGeo = new THREE.PlaneGeometry(2, 2);
+  const fsCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+  const FS_VERT = 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }';
+  const rtOpts = { type: THREE.HalfFloatType, depthBuffer: false };
+  let rtScene = null, rtA = null, rtB = null, bloomW = 0, bloomH = 0;
+  const bloomScene = new THREE.Scene();
+  const bloomQuad = new THREE.Mesh(fsGeo, null);
+  bloomQuad.frustumCulled = false;
+  bloomScene.add(bloomQuad);
+
+  const brightMat = new THREE.ShaderMaterial({
+    uniforms: { tDiffuse: { value: null }, threshold: { value: 0.88 }, knee: { value: 0.32 } },
+    vertexShader: FS_VERT,
+    fragmentShader: [
+      'uniform sampler2D tDiffuse; uniform float threshold; uniform float knee; varying vec2 vUv;',
+      'void main(){',
+      '  vec3 c = texture2D(tDiffuse, vUv).rgb;',
+      '  float l = max(max(c.r, c.g), c.b);',
+      '  float w = smoothstep(threshold, threshold + knee, l);',
+      '  gl_FragColor = vec4(c * w, 1.0);',
+      '}',
+    ].join('\n'),
+    depthTest: false, depthWrite: false, toneMapped: false,
+  });
+
+  const blurMat = new THREE.ShaderMaterial({
+    uniforms: { tDiffuse: { value: null }, dir: { value: new THREE.Vector2(1, 0) }, texel: { value: new THREE.Vector2() } },
+    vertexShader: FS_VERT,
+    fragmentShader: [
+      'uniform sampler2D tDiffuse; uniform vec2 dir; uniform vec2 texel; varying vec2 vUv;',
+      'void main(){',
+      '  vec3 sum = texture2D(tDiffuse, vUv).rgb * 0.227;',
+      '  vec2 o1 = dir * texel * 1.3846;',
+      '  vec2 o2 = dir * texel * 3.2308;',
+      '  sum += (texture2D(tDiffuse, vUv + o1).rgb + texture2D(tDiffuse, vUv - o1).rgb) * 0.3162;',
+      '  sum += (texture2D(tDiffuse, vUv + o2).rgb + texture2D(tDiffuse, vUv - o2).rgb) * 0.0702;',
+      '  gl_FragColor = vec4(sum, 1.0);',
+      '}',
+    ].join('\n'),
+    depthTest: false, depthWrite: false, toneMapped: false,
+  });
+
+  const compMat = new THREE.ShaderMaterial({
+    uniforms: { tScene: { value: null }, tBloom: { value: null }, strength: { value: 0.85 } },
+    vertexShader: FS_VERT,
+    fragmentShader: [
+      'uniform sampler2D tScene; uniform sampler2D tBloom; uniform float strength; varying vec2 vUv;',
+      'void main(){',
+      '  vec3 c = texture2D(tScene, vUv).rgb + texture2D(tBloom, vUv).rgb * strength;',
+      '  c = max(c, 0.0);',
+      '  gl_FragColor = vec4(pow(c, vec3(1.0 / 2.2)), 1.0);',
+      '}',
+    ].join('\n'),
+    depthTest: false, depthWrite: false, toneMapped: false,
+  });
+
+  function resizeBloom() {
+    const size = renderer.getDrawingBufferSize(new THREE.Vector2());
+    if (size.x === bloomW && size.y === bloomH) return;
+    bloomW = size.x; bloomH = size.y;
+    [rtScene, rtA, rtB].forEach((rt) => { if (rt) rt.dispose(); });
+    rtScene = new THREE.WebGLRenderTarget(bloomW, bloomH, { type: THREE.HalfFloatType, samples: 4 });
+    const hw = Math.max(1, bloomW >> 1), hh = Math.max(1, bloomH >> 1);
+    rtA = new THREE.WebGLRenderTarget(hw, hh, rtOpts);
+    rtB = new THREE.WebGLRenderTarget(hw, hh, rtOpts);
+  }
+
+  function renderBloom() {
+    renderer.info.reset();
+    resizeBloom();
+    renderer.setRenderTarget(rtScene);
+    renderer.render(scene, activeCam);
+
+    bloomQuad.material = brightMat;
+    brightMat.uniforms.tDiffuse.value = rtScene.texture;
+    renderer.setRenderTarget(rtA);
+    renderer.render(bloomScene, fsCam);
+
+    bloomQuad.material = blurMat;
+    blurMat.uniforms.tDiffuse.value = rtA.texture;
+    blurMat.uniforms.dir.value.set(1, 0);
+    blurMat.uniforms.texel.value.set(1 / rtA.width, 1 / rtA.height);
+    renderer.setRenderTarget(rtB);
+    renderer.render(bloomScene, fsCam);
+
+    blurMat.uniforms.tDiffuse.value = rtB.texture;
+    blurMat.uniforms.dir.value.set(0, 1);
+    renderer.setRenderTarget(rtA);
+    renderer.render(bloomScene, fsCam);
+
+    bloomQuad.material = compMat;
+    compMat.uniforms.tScene.value = rtScene.texture;
+    compMat.uniforms.tBloom.value = rtA.texture;
+    renderer.setRenderTarget(null);
+    renderer.render(bloomScene, fsCam);
+  }
+
   scene.fog = new THREE.Fog(0xcfe0ea, 1800, 6200);
 
   const persp = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 1, 20000);
@@ -1512,6 +1611,7 @@
 
   window.addEventListener('resize', () => {
     renderer.setSize(window.innerWidth, window.innerHeight);
+    resizeBloom();
     persp.aspect = window.innerWidth / window.innerHeight;
     persp.updateProjectionMatrix();
     if (mode === 'ortho') updateOrtho();
@@ -1844,7 +1944,8 @@
       m.gem.rotation.y += dt * 0.9;
     });
 
-    renderer.render(scene, activeCam);
+    if (bloomEnabled) renderBloom();
+    else { renderer.info.reset(); renderer.render(scene, activeCam); }
     if (hudOn && !hudPrimed) { hudPrimed = true; updateHud(0.6); }
 
     if (!hideLoading) {
@@ -1860,6 +1961,7 @@
   });
 
   const params = new URLSearchParams(window.location.search);
+  const bloomEnabled = params.get('bloom') !== '0';
   if (TIMES[params.get('time')]) setTime(params.get('time'));
   if (WEATHERS[params.get('weather')]) setWeather(params.get('weather'));
   if (params.get('flood') === '1') setFlood(true);
