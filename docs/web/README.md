@@ -16,8 +16,10 @@
 - 左键拖动旋转，滚轮缩放，右键拖动平移，双击复位。
 - 顶栏：时间五档（清晨/正午/黄昏/雨夜/夜晚）、天气四档（晴/多云/小雨/薄雾）、车流、汛期、夜景模式、复位视角。
 - 左下：全城鸟瞰 / 河谷 / 园区 / 科创大楼 / 滨河步道 / 观景台六个相机预设。
-- 点击建筑、路灯、水面控制牌、信息牌或 ★ 锚点 → 右侧面板。
-- URL 深链（可组合）：`?view=CAM-03b`、`?time=night`、`?weather=drizzle`、`?flood=1`、`?open=OBJ-01`。
+- 悬停可交互物：青色描边环 + 跟随光标的名称气泡；点击后相机自动按物体包围球构图。
+- 点击建筑、路灯、水面控制牌、信息牌或 ★ 锚点 → 面板锚定到物体投影位置，虚线连到锚点；Esc 或 × 关闭。
+- URL 深链（可组合）：`?view=CAM-03b`、`?time=night`、`?weather=drizzle`、`?flood=1`、`?open=OBJ-01`；深链打开物体时相机直接落位（不做补间）。
+- 调试：`?hud=1` 显示左上角 FPS / draw calls / 三角形 / 几何与纹理数。
 
 ## 文件
 
@@ -45,6 +47,7 @@ docs/interaction-nodes.csv
 ## 已实现交互
 
 - 相机：CAM-01 自由漫游（轨道）、CAM-02 三个鸟瞰（正交 / 河谷 / 园区）、CAM-03 三个跳转（科创大楼 / 滨河步道 / 观景台）。
+- 反馈：悬停描边与名称气泡、选中环呼吸、面板锚定 + 虚线连接、按物体包围球构图（点击 1.1 s 补间、深链直接落位）。
 - 物件：OBJ-01 科创大楼三页签（简介 / 楼层 / 能耗示例）、OBJ-02 路灯开关与亮度、OBJ-03 水位（常态 / 汛期）与流速、OBJ-04 信息牌。
 - 环境：ENV-01 时间五档、ENV-02 天气四档（含雨与雾）、ENV-03 车流开关。
 - 事件：EVT-01 汛期模拟（水位 +2.4 m、水色变浑、告警提示）、EVT-02 夜景模式（窗光 / 路灯 / 塔冠依次点亮）。
@@ -52,7 +55,8 @@ docs/interaction-nodes.csv
 ## 限制
 
 - 灰盒级：地形是程序化高度场，建筑是体块，没有 PBR 贴图、真实水面和车辆路径。目标是验证交互与信息架构，不是最终视觉；写实版见 `docs/blueprint-outline.md` 的 UE5 分支。
-- 无头截图（CI / 本机验证）：
+- 无头截图（CI / 本机验证）：本机 Chrome 146 在 `--virtual-time-budget` 下不推进 `requestAnimationFrame`，截图只能拿到首帧；因此深链用 instant 落位。若要在 CI 验证补间/悬停，需要 CDP 或 Playwright 驱动。
+- 无头截图命令：
   ```sh
   google-chrome --headless=new --no-sandbox --use-gl=angle --use-angle=swiftshader \
     --enable-unsafe-swiftshader --virtual-time-budget=16000 \

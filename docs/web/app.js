@@ -657,6 +657,7 @@
         const cx = x + (Math.random() - 0.5) * rule.step * 0.35;
         const cy = y + (Math.random() - 0.5) * rule.step * 0.35;
         if (CITY.buildings.some((b) => Math.hypot(b.x - cx, b.y - cy) < Math.max(b.sx, b.sy) / 2 + 30)) continue;
+        if ((CITY.markers || []).some((m) => Math.hypot(m.x - cx, m.y - cy) < 36)) continue;
         let blocked = false;
         for (const road of CITY.roads) {
           for (let i = 0; i < road.points.length - 1 && !blocked; i++) {
@@ -1085,6 +1086,7 @@
 
   let flight = null;
   function flyTo(spec) {
+    camTween = null;
     const pos = new THREE.Vector3(spec.x, spec.z, -spec.y);
     const yaw = spec.yaw * DEG, pitch = spec.pitch * DEG;
     const dir = new THREE.Vector3(
@@ -1148,6 +1150,240 @@
   }
   const pickList = pickables();
 
+  // ---------------------------------------------------------------- 反馈：悬停 / 选中 / 面板锚点
+  const ACCENT = 0x7fd0ff;
+
+  function pickTarget(pick) {
+    if (!pick) return null;
+    if (pick.type === 'building') {
+      const b = CITY.buildings.find((x) => x.id === pick.id);
+      return b ? { title: b.name, nodeId: null } : null;
+    }
+    const node = CITY.nodes[pick.id];
+    return node ? { title: node.name, nodeId: pick.id } : null;
+  }
+
+  function sceneBuilding(id) {
+    const hit = buildings.find((x) => x.data.id === id);
+    return hit ? hit.mesh : null;
+  }
+
+  function objectForNode(id) {
+    if (id === 'OBJ-01') return sceneBuilding('B-01');
+    if (id === 'OBJ-02') {
+      const lamp = lamps.find((l) => l.group.userData.node === 'OBJ-02');
+      return lamp ? lamp.group : null;
+    }
+    const marker = markers.find((m) => m.marker.nodeId === id);
+    return marker ? marker.group : null;
+  }
+
+  function objectForPick(pick, fallback) {
+    if (!pick) return fallback || null;
+    if (pick.type === 'building') {
+      return sceneBuilding(pick.id) || fallback || null;
+    }
+    return objectForNode(pick.id) || fallback || null;
+  }
+
+  const ringGeo = new THREE.RingGeometry(0.82, 1, 72);
+  function makeRing(color, opacity) {
+    const mesh = new THREE.Mesh(ringGeo, new THREE.MeshBasicMaterial({
+      color: color, transparent: true, opacity: opacity, depthWrite: false, side: THREE.DoubleSide,
+    }));
+    mesh.rotation.x = -Math.PI / 2;
+    mesh.renderOrder = 3;
+    mesh.visible = false;
+    scene.add(mesh);
+    return mesh;
+  }
+  const hoverRing = makeRing(ACCENT, 0.4);
+  const selRing = makeRing(ACCENT, 0.9);
+
+  function boundsOf(obj) {
+    const box = new THREE.Box3().setFromObject(obj);
+    const sphere = box.getBoundingSphere(new THREE.Sphere());
+    return {
+      center: sphere.center.clone(),
+      radius: Math.max(sphere.radius, 6),
+      top: box.max.y,
+      bottom: box.min.y,
+    };
+  }
+
+  function ringBase(obj, b) {
+    const isMarker = markers.some((m) => m.group === obj);
+    return isMarker ? 0.9 : b.bottom + 0.6;
+  }
+
+  function placeRing(ring, obj) {
+    const b = boundsOf(obj);
+    ring.position.set(b.center.x, ringBase(obj, b), b.center.z);
+    ring.scale.setScalar(clamp(b.radius * 0.55, 5, 22));
+  }
+
+  const hoverCanvas = document.createElement('canvas');
+  hoverCanvas.width = 512; hoverCanvas.height = 128;
+  const hoverTex = new THREE.CanvasTexture(hoverCanvas);
+  hoverTex.colorSpace = THREE.SRGBColorSpace;
+  const hoverLabel = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: hoverTex, transparent: true, depthTest: false, depthWrite: false,
+  }));
+  hoverLabel.center.set(0.5, 0);
+  hoverLabel.visible = false;
+  hoverLabel.renderOrder = 5;
+  scene.add(hoverLabel);
+
+  function drawHoverLabel(text) {
+    const ctx = hoverCanvas.getContext('2d');
+    const w = hoverCanvas.width, h = hoverCanvas.height;
+    ctx.clearRect(0, 0, w, h);
+    ctx.fillStyle = 'rgba(8, 16, 24, 0.9)';
+    ctx.strokeStyle = 'rgba(127, 208, 255, 0.6)';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.roundRect(10, 26, w - 20, 76, 22);
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = '#eaf6ff';
+    ctx.font = '600 38px "Noto Sans CJK SC", "PingFang SC", "Microsoft YaHei", sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(text, w / 2, 64);
+    hoverTex.needsUpdate = true;
+  }
+
+  let hoverObj = null;
+  function setHover(obj, title) {
+    if (obj === hoverObj) return;
+    hoverObj = obj;
+    if (!obj) {
+      hoverLabel.visible = false;
+      hoverRing.visible = false;
+      return;
+    }
+    const b = boundsOf(obj);
+    drawHoverLabel(title || '');
+    hoverLabel.position.set(b.center.x, b.top + 12, b.center.z);
+    hoverLabel.visible = true;
+    hoverRing.visible = true;
+    placeRing(hoverRing, obj);
+  }
+
+  function setHoverFromHit(hit) {
+    if (!hit) { setHover(null); return; }
+    const pick = hit.object.userData.pick;
+    const target = pickTarget(pick);
+    if (!target) { setHover(null); return; }
+    setHover(objectForPick(pick, hit.object), target.title);
+  }
+
+  let selectedObj = null;
+  function setSelected(obj, title) {
+    selectedObj = obj || null;
+    if (!obj) { selRing.visible = false; return; }
+    selRing.visible = true;
+    placeRing(selRing, obj);
+  }
+
+  let camTween = null;
+  function frameObject(obj, instant) {
+    if (!obj) return;
+    const b = boundsOf(obj);
+    if (mode === 'ortho') {
+      orbit.target.copy(b.center);
+      orbit.target.y = Math.max(orbit.target.y, 0);
+      updateOrtho();
+      return;
+    }
+    const fov = (persp.fov * Math.PI) / 180;
+    const minDist = b.radius < 4 ? 170 : b.radius > 12 ? 300 : 90;
+    const dist = clamp((b.radius / Math.tan(fov / 2)) * 2.0, minDist, 2600);
+    const pitch = clamp(orbit.pitch < 0.35 ? 0.5 : orbit.pitch, 0.3, 0.9);
+    if (instant) {
+      orbit.target.copy(b.center);
+      orbit.dist = dist;
+      orbit.pitch = pitch;
+      updatePersp();
+      return;
+    }
+    camTween = {
+      t: 0, dur: 1.1,
+      fromT: orbit.target.clone(), toT: b.center.clone(),
+      fromD: orbit.dist, toD: dist,
+      fromP: orbit.pitch, toP: pitch,
+    };
+  }
+
+  const panelLink = document.getElementById('panel-link');
+  const panelLine = document.getElementById('panel-link-line');
+  const panelDot = document.getElementById('panel-link-dot');
+  const PANEL_GAP = 54;
+
+  function resetPanelPosition() {
+    panel.style.left = '';
+    panel.style.top = '';
+    panel.style.right = '';
+  }
+
+  function updatePanelAnchor() {
+    if (!selectedObj || panel.classList.contains('hidden')) {
+      panelLink.classList.add('hidden');
+      return;
+    }
+    const b = boundsOf(selectedObj);
+    const p = b.center.clone();
+    p.y = b.top;
+    p.project(activeCam);
+    const behind = p.z > 1;
+    const vw = window.innerWidth, vh = window.innerHeight;
+    const sx = (p.x * 0.5 + 0.5) * vw;
+    const sy = (-p.y * 0.5 + 0.5) * vh;
+    const rect = panel.getBoundingClientRect();
+    const w = rect.width || 336;
+    const h = rect.height || 300;
+    let left = sx + PANEL_GAP;
+    if (left + w > vw - 12) left = sx - w - PANEL_GAP;
+    left = clamp(left, 12, vw - w - 12);
+    const top = clamp(sy - 96, 74, Math.max(74, vh - h - 12));
+    panel.style.right = 'auto';
+    panel.style.left = left + 'px';
+    panel.style.top = top + 'px';
+    if (behind) { panelLink.classList.add('hidden'); return; }
+    panelLink.classList.remove('hidden');
+    const anchorX = clamp(sx, 0, vw);
+    const anchorY = clamp(sy, 0, vh);
+    const edgeX = left > anchorX ? left : left + w;
+    const edgeY = clamp(anchorY, top + 16, top + h - 16);
+    panelLine.setAttribute('x1', edgeX);
+    panelLine.setAttribute('y1', edgeY);
+    panelLine.setAttribute('x2', anchorX);
+    panelLine.setAttribute('y2', anchorY);
+    panelDot.setAttribute('cx', anchorX);
+    panelDot.setAttribute('cy', anchorY);
+  }
+
+  // HUD
+  const hudEl = document.getElementById('hud');
+  let hudPrimed = false;
+  let hudOn = false;
+  let hudFrames = 0, hudTime = 0;
+
+  function updateHud(dt) {
+    if (!hudOn) return;
+    hudFrames++;
+    hudTime += dt;
+    if (hudTime < 0.5) return;
+    const info = renderer.info;
+    hudEl.textContent = 'FPS ' + Math.round(hudFrames / hudTime)
+      + '\ndraw ' + info.render.calls
+      + '\ntris ' + (info.render.triangles / 1000).toFixed(0) + 'k'
+      + '\ngeo ' + info.memory.geometries + '  tex ' + info.memory.textures
+      + '\ndpr ' + renderer.getPixelRatio().toFixed(2);
+    hudFrames = 0;
+    hudTime = 0;
+  }
+
   function raycastAt(event) {
     raycaster.setFromCamera(ndc(event), activeCam);
     return raycaster.intersectObjects(pickList, false);
@@ -1155,6 +1391,7 @@
 
   function onPointerDown(event) {
     if (event.button !== 0 && event.button !== 2) return;
+    camTween = null;
     canvas.setPointerCapture(event.pointerId);
     drag = { x: event.clientX, y: event.clientY, button: event.button, moved: 0 };
   }
@@ -1166,6 +1403,7 @@
         lastHover = now;
         const hit = raycastAt(event)[0];
         canvas.style.cursor = hit ? 'pointer' : 'grab';
+        setHoverFromHit(hit);
       }
       return;
     }
@@ -1215,12 +1453,14 @@
     if (!hit) return;
     const pick = hit.object.userData.pick;
     if (!pick) return;
+    setHover(null);
     if (pick.type === 'building') openBuilding(pick.id);
     else if (pick.type === 'node') openNode(pick.id);
   }
 
   function onWheel(event) {
     event.preventDefault();
+    camTween = null;
     const factor = Math.exp(event.deltaY * 0.0012);
     if (mode === 'ortho') {
       orthoState.zoom = clamp(orthoState.zoom * factor, 0.34, 2.6);
@@ -1235,6 +1475,7 @@
   canvas.addEventListener('pointermove', onPointerMove);
   canvas.addEventListener('pointerup', onPointerUp);
   canvas.addEventListener('pointercancel', () => { drag = null; });
+  canvas.addEventListener('pointerleave', () => setHover(null));
   canvas.addEventListener('contextmenu', (event) => event.preventDefault());
   canvas.addEventListener('wheel', onWheel, { passive: false });
 
@@ -1255,27 +1496,39 @@
   }
   function closePanel() {
     panel.classList.add('hidden');
+    resetPanelPosition();
+    panelLink.classList.add('hidden');
+    setSelected(null);
   }
   $('panel-close').addEventListener('click', closePanel);
+  window.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') closePanel();
+  });
 
   function nodeById(id) {
     return CITY.nodes[id];
   }
 
-  function openNode(id) {
+  function openNode(id, opts) {
     const node = nodeById(id);
     if (!node) return;
     if (id === 'OBJ-01') openTower(node);
     else if (id === 'OBJ-02') openLamp(node);
     else if (id === 'OBJ-03') openWater(node);
     else openGenericNode(node);
+    const obj = objectForNode(id);
+    setSelected(obj);
+    if (obj && (!opts || opts.frame !== false)) frameObject(obj, opts && opts.instant);
+    updatePanelAnchor();
   }
 
-  function openBuilding(id) {
+  function openBuilding(id, opts) {
     const b = CITY.buildings.find((x) => x.id === id);
     if (!b) return;
-    if (id === 'B-01') { openTower(nodeById('OBJ-01')); return; }
-    openPanel(
+    if (id === 'B-01') {
+      openTower(nodeById('OBJ-01'));
+    } else {
+      openPanel(
       '<h2>' + b.name + '</h2>' +
       '<div class="sub">' + b.id + ' · ' + b.zone + ' 区 · ' + b.type + '</div>' +
       '<dl class="kv">' +
@@ -1284,7 +1537,12 @@
       '<dt>基底</dt><dd>EL ' + b.baseEL.toFixed(1) + '</dd>' +
       '<dt>说明</dt><dd>' + b.notes + '</dd>' +
       '</dl>'
-    );
+      );
+    }
+    const mesh = sceneBuilding(id);
+    setSelected(mesh);
+    if (mesh && (!opts || opts.frame !== false)) frameObject(mesh, opts && opts.instant);
+    updatePanelAnchor();
   }
 
   function openTower(node) {
@@ -1476,6 +1734,15 @@
     const now = performance.now();
 
     updateFlight(dt);
+    if (camTween) {
+      camTween.t = Math.min(1, camTween.t + dt / camTween.dur);
+      const e = smoothstep(0, 1, camTween.t);
+      orbit.target.lerpVectors(camTween.fromT, camTween.toT, e);
+      orbit.dist = lerp(camTween.fromD, camTween.toD, e);
+      orbit.pitch = lerp(camTween.fromP, camTween.toP, e);
+      updatePersp();
+      if (camTween.t >= 1) camTween = null;
+    }
     if (mode === 'persp' && !flight) {
       // orbit 在交互时直接更新；这里不重复计算
     }
@@ -1518,10 +1785,22 @@
 
     fillerMaterial.emissiveIntensity = envCur.windows * 1.7;
 
+    // 悬停标签随距离缩放，保持屏幕尺寸稳定
+    if (hoverLabel.visible) {
+      const hd = activeCam.position.distanceTo(hoverLabel.position);
+      const hs = clamp(hd * 0.075, 16, 240);
+      hoverLabel.scale.set(hs, hs * 0.25, 1);
+    }
+    if (selRing.visible) {
+      selRing.material.opacity = 0.72 + Math.sin(elapsed * 3.2) * 0.16;
+    }
+    updatePanelAnchor();
+    updateHud(dt);
+
     // 分区标签：近景淡出，避免大牌子糊脸
     zoneLabels.forEach((sprite) => {
       const d = activeCam.position.distanceTo(sprite.position);
-      sprite.material.opacity = clamp((d - 520) / 720, 0.03, 0.92);
+      sprite.material.opacity = clamp((d - 520) / 720, 0.03, 0.92) * (selectedObj ? 0.35 : 1);
     });
 
     // 锚点浮动
@@ -1532,6 +1811,7 @@
     });
 
     renderer.render(scene, activeCam);
+    if (hudOn && !hudPrimed) { hudPrimed = true; updateHud(0.6); }
 
     if (!hideLoading) {
       hideLoading = true;
@@ -1549,7 +1829,13 @@
   if (TIMES[params.get('time')]) setTime(params.get('time'));
   if (WEATHERS[params.get('weather')]) setWeather(params.get('weather'));
   if (params.get('flood') === '1') setFlood(true);
-  if (params.get('open')) setTimeout(() => openNode(params.get('open')), 30);
+  if (params.get('open')) {
+    setTimeout(() => openNode(params.get('open'), { frame: !params.get('view'), instant: true }), 30);
+  }
+  if (params.get('hud') === '1') {
+    hudOn = true;
+    hudEl.classList.remove('hidden');
+  }
   const viewParam = params.get('view');
   if (viewParam === 'ortho') {
     setMode('ortho');
