@@ -11,6 +11,10 @@
 |---|---|---|
 | ![](screenshots/day.png) | ![](screenshots/night.png) | ![](screenshots/flood-night.png) |
 
+| 悬停/选中反馈（面板锚定） | Bloom 夜景 |
+|---|---|
+| ![](screenshots/feedback-panel.png) | ![](screenshots/bloom-night.png) |
+
 ## 操作
 
 - 左键拖动旋转，滚轮缩放，右键拖动平移，双击复位。
